@@ -47,8 +47,12 @@ export async function GET(request: Request) {
     const [airResponse, weatherResponse] = await Promise.all([fetch(airUrl, { next: { revalidate: 900 } }), fetch(weatherUrl, { next: { revalidate: 900 } })])
     if (!airResponse.ok || !weatherResponse.ok) throw new Error('Air data unavailable')
     const [air, weather] = await Promise.all([airResponse.json(), weatherResponse.json()])
-    const hourly = (air.hourly?.time ?? []).map((time: string, index: number) => ({ time, value: air.hourly?.european_aqi?.[index] })).filter((item: { value?: number }) => typeof item.value === 'number').slice(0, 12)
-    const trend = hourly.length ? hourly.map((item: { time: string; value: number }) => ({ time: new Date(item.time).toLocaleTimeString('en', { hour: 'numeric' }), value: item.value })) : fallback.trend
+    const hourly = (air.hourly?.time ?? []).map((time: string, index: number) => ({ time, value: air.hourly?.european_aqi?.[index] })).filter((item: { value?: number }) => typeof item.value === 'number')
+    const currentTime = air.current?.time
+    const currentIndex = hourly.findIndex((item: { time: string }) => item.time === currentTime)
+    const startIndex = Math.max(0, currentIndex - 2)
+    const visibleHours = hourly.slice(startIndex, startIndex + 12)
+    const trend = visibleHours.length ? visibleHours.map((item: { time: string; value: number }) => ({ time: new Date(item.time).toLocaleTimeString('en', { hour: 'numeric' }), value: item.value })) : fallback.trend
     const current = air.current ?? {}
     const currentWeather = weather.current ?? {}
     return NextResponse.json({

@@ -35,16 +35,29 @@ function sessionCookie(response: NextResponse, id: string) {
   return response
 }
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
     const { id, isNew } = await getSessionId()
-    const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
+    const { searchParams } = new URL(request.url)
+    const period = searchParams.get('period') === 'month' ? 'month' : 'week'
+    const periodStart = new Date(Date.now() - (period === 'month' ? 30 : 7) * 24 * 60 * 60 * 1000)
     const rows = await db.select({
       type: breathewiseActions.actionType,
       count: sql<number>`count(*)::int`,
       co2Kg: sql<string>`coalesce(sum(${breathewiseActions.co2Kg}), 0)::text`,
-    }).from(breathewiseActions).where(and(eq(breathewiseActions.sessionId, id), gte(breathewiseActions.createdAt, weekAgo))).groupBy(breathewiseActions.actionType)
+    }).from(breathewiseActions).where(and(eq(breathewiseActions.sessionId, id), gte(breathewiseActions.createdAt, periodStart))).groupBy(breathewiseActions.actionType)
     const impact = { co2Kg: 0, total: 0, transit: 0, carpool: 0, safeWalk: 0, homeAction: 0 }
+    const dailyRows = await db.select({
+      day: sql<string>`date_trunc('day', ${breathewiseActions.createdAt})::text`,
+      count: sql<number>`count(*)::int`,
+    }).from(breathewiseActions).where(and(eq(breathewiseActions.sessionId, id), gte(breathewiseActions.createdAt, periodStart))).groupBy(sql`date_trunc('day', ${breathewiseActions.createdAt})`).orderBy(sql`date_trunc('day', ${breathewiseActions.createdAt})`)
+    const buckets = Array.from({ length: 7 }, () => 0)
+    const periodMs = (period === 'month' ? 30 : 7) * 24 * 60 * 60 * 1000
+    for (const row of dailyRows) {
+      const elapsed = Date.now() - new Date(row.day).getTime()
+      const bucket = Math.max(0, Math.min(6, 6 - Math.floor(elapsed / (periodMs / 7))))
+      buckets[bucket] += Number(row.count)
+    }
     for (const row of rows) {
       const count = Number(row.count)
       impact.total += count
@@ -54,7 +67,7 @@ export async function GET() {
       if (row.type === 'safe_walk') impact.safeWalk = count
       if (row.type === 'home_action') impact.homeAction = count
     }
-    const response = NextResponse.json(impact)
+    const response = NextResponse.json({ ...impact, trend: buckets })
     return isNew ? sessionCookie(response, id) : response
   } catch {
     return NextResponse.json({ error: 'Impact tracker is temporarily unavailable.' }, { status: 503 })

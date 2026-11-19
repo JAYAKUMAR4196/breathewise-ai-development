@@ -48,8 +48,8 @@ export async function GET(request: Request) {
     if (!airResponse.ok || !weatherResponse.ok) throw new Error('Air data unavailable')
     const [air, weather] = await Promise.all([airResponse.json(), weatherResponse.json()])
     const hourly = (air.hourly?.time ?? []).map((time: string, index: number) => ({ time, value: air.hourly?.european_aqi?.[index] })).filter((item: { value?: number }) => typeof item.value === 'number')
-    const currentTime = air.current?.time
-    const currentIndex = hourly.findIndex((item: { time: string }) => item.time === currentTime)
+    const currentTime = typeof air.current?.time === 'string' ? air.current.time.slice(0, 13) : ''
+    const currentIndex = hourly.findIndex((item: { time: string }) => item.time.startsWith(currentTime))
     const startIndex = Math.max(0, currentIndex - 2)
     const visibleHours = hourly.slice(startIndex, startIndex + 12)
     const trend = visibleHours.length ? visibleHours.map((item: { time: string; value: number }) => ({ time: new Date(item.time).toLocaleTimeString('en', { hour: 'numeric' }), value: item.value })) : fallback.trend

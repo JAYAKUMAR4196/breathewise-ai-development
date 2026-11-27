@@ -125,7 +125,7 @@ button:focus-visible, input:focus-visible { outline: 2px solid #63947a; outline-
 .breadcrumb strong { color: #32443a; font-weight: 600; }
 .location-search { width: 235px; height: 34px; margin-left: auto; display: flex; align-items: center; gap: 8px; padding: 0 8px 0 11px; color: #718077; border: 1px solid #e6eae5; border-radius: 8px; background: #fafbf9; }
 .location-search:focus-within { border-color: #9bb8a1; box-shadow: 0 0 0 3px rgba(100,142,111,.1); }
-.location-search input { width: 100%; min-width: 0; border: 0; outline: 0; background: transparent; font-size: 11px; color: #334239; }
+.location-search input { width: 100%; min-width: 0; border: 0; outline: 0; background: transparent; font-size: 20px; line-height: 1.2; color: #334239; }
 .location-search input::placeholder { color: #7c8880; opacity: 1; }
 .location-search button { width: 23px; height: 23px; display: grid; place-items: center; flex: 0 0 auto; padding: 0; color: #819087; border: 0; border-radius: 6px; background: transparent; }
 .location-search button:hover { background: #eaf0e9; }
@@ -138,6 +138,9 @@ h1 { margin: 11px 0 6px; color: #27372e; font-size: clamp(26px, 2.5vw, 34px); li
 h1 span { color: #76927c; font-weight: 500; }
 .page-heading p { margin: 0; color: #7c8880; font-size: 12px; line-height: 1.65; }
 .date-pill,.period-pill { display: flex; align-items: center; gap: 8px; height: 34px; padding: 0 11px; border: 1px solid #e5e9e3; border-radius: 8px; background: #fff; color: #5f6e64; font-size: 10px; white-space: nowrap; }
+.date-pill { width: 260px; height: 68px; justify-content: space-between; gap: 15px; padding: 0 22px; border-color: #dfe3df; border-radius: 16px; box-shadow: 0 2px 7px rgba(38,53,46,.08); font-size: 20px; }
+.date-pill svg:first-child { width: 27px; height: 27px; }
+.date-pill svg:last-child { width: 18px; height: 18px; }
 .date-pill { cursor: default; }
 .overview-grid { display: grid; grid-template-columns: minmax(0, 1.09fr) minmax(0, .91fr); gap: 16px; }
 .air-hero { min-height: 285px; padding: 21px 23px 0; overflow: hidden; color: #fff; border-radius: 14px; background: radial-gradient(ellipse at 100% 10%, rgba(113,155,117,.24), transparent 43%), linear-gradient(120deg, #173d32, #214b3b 70%, #234b3d); box-shadow: 0 7px 22px rgba(34,65,49,.08); }

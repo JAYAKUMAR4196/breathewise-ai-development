@@ -30,8 +30,12 @@ export async function GET(request: Request) {
     const geoResponse = await fetch(geoUrl, { next: { revalidate: 86400 } })
     if (!geoResponse.ok) throw new Error('Location lookup failed')
     const geoData = await geoResponse.json()
-    const place = geoData.results?.[0]
+    const places = Array.isArray(geoData.results) ? geoData.results : []
+    const place = places[0]
     if (!place) return NextResponse.json({ error: 'City not found' }, { status: 404 })
+    if (searchParams.get('suggestions') === '1') {
+      return NextResponse.json({ suggestions: places.slice(0, 5).map((result: { name: string; country?: string; admin1?: string }) => ({ name: result.name, country: result.country || '', admin1: result.admin1 || '' })) })
+    }
 
     const common = new URLSearchParams({ latitude: String(place.latitude), longitude: String(place.longitude), timezone: 'auto' })
     const airUrl = new URL('https://air-quality-api.open-meteo.com/v1/air-quality')

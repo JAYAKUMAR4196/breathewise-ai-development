@@ -138,9 +138,9 @@ h1 { margin: 11px 0 6px; color: #27372e; font-size: clamp(26px, 2.5vw, 34px); li
 h1 span { color: #76927c; font-weight: 500; }
 .page-heading p { margin: 0; color: #7c8880; font-size: 12px; line-height: 1.65; }
 .date-pill,.period-pill { display: flex; align-items: center; gap: 8px; height: 34px; padding: 0 11px; border: 1px solid #e5e9e3; border-radius: 8px; background: #fff; color: #5f6e64; font-size: 10px; white-space: nowrap; }
-.date-pill { width: 496px; flex: 0 0 496px; height: 135px; justify-content: space-between; gap: 30px; padding: 0 46px; border-color: #dfe3df; border-radius: 31px; box-shadow: 0 3px 12px rgba(38,53,46,.08); font-size: 40px; }
-.date-pill svg:first-child { width: 52px; height: 52px; }
-.date-pill svg:last-child { width: 34px; height: 34px; }
+.date-pill { width: 496px; flex: 0 0 496px; height: 135px; justify-content: space-between; gap: 30px; padding: 0 46px; border: 1px solid #d8dfda; border-radius: 31px; background: linear-gradient(180deg, #fff 0%, #fbfcfb 100%); box-shadow: 0 8px 24px rgba(38,53,46,.11), inset 0 1px 0 rgba(255,255,255,.9); color: #53635a; font-size: 40px; font-weight: 500; letter-spacing: -1px; }
+.date-pill svg:first-child { width: 52px; height: 52px; flex: 0 0 auto; color: #64736b; stroke-width: 2.2; }
+.date-pill svg:last-child { width: 34px; height: 34px; flex: 0 0 auto; color: #53635a; stroke-width: 2.4; }
 .date-pill { cursor: default; }
 .overview-grid { display: grid; grid-template-columns: minmax(0, 1.09fr) minmax(0, .91fr); gap: 16px; }
 .air-hero { min-height: 285px; padding: 21px 23px 0; overflow: hidden; color: #fff; border-radius: 14px; background: radial-gradient(ellipse at 100% 10%, rgba(113,155,117,.24), transparent 43%), linear-gradient(120deg, #173d32, #214b3b 70%, #234b3d); box-shadow: 0 7px 22px rgba(34,65,49,.08); }

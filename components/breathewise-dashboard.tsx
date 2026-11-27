@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { motion } from 'framer-motion'
 import {
   Activity, ArrowDownRight, ArrowRight, ArrowUpRight, Wind, MapPin, Search,
@@ -82,7 +82,7 @@ function Sidebar({ section, onChange, onClose }: { section: Section; onChange: (
       <div className="household-card">
         <div className="household-icon"><HeartPulse size={16} /></div>
         <div><span className="eyebrow">YOUR HOUSEHOLD</span><strong>Family of 4</strong><p>2 adults · 2 children</p></div>
-        <button className="icon-button edit-profile" aria-label="Edit household profile"><ChevronDown size={15} /></button>
+        <button className="icon-button edit-profile" type="button" onClick={() => onChange('Daily plan')} aria-label="Edit household profile"><ChevronDown size={15} /></button>
       </div>
       <div className="sidebar-bottom"><span className="live-indicator" /> <span>Air quality from Open-Meteo</span></div>
     </aside>
@@ -91,16 +91,23 @@ function Sidebar({ section, onChange, onClose }: { section: Section; onChange: (
 
 function Header({ city, section, onSearch, onOpenMenu, onThemeToggle, darkMode }: { city: string; section: Section; onSearch: (city: string) => void; onOpenMenu: () => void; onThemeToggle: () => void; darkMode: boolean }) {
   const [query, setQuery] = useState('')
+  const searchRef = useRef<HTMLInputElement>(null)
   const submit = (event: React.FormEvent) => { event.preventDefault(); if (query.trim()) { onSearch(query.trim()); setQuery('') } }
+  useEffect(() => {
+    const focusSearch = () => searchRef.current?.focus()
+    window.addEventListener('breathewise:focus-search', focusSearch)
+    return () => window.removeEventListener('breathewise:focus-search', focusSearch)
+  }, [])
+
   return (
     <header className="topbar">
-      <button className="icon-button mobile-menu" aria-label="Open navigation" onClick={onOpenMenu}><Menu size={20} /></button>
+      <button className="icon-button mobile-menu" type="button" aria-label="Open navigation" onClick={onOpenMenu}><Menu size={20} /></button>
       <div className="breadcrumb"><span>Workspace</span><span className="breadcrumb-slash">/</span><strong>{section}</strong></div>
       <form className="location-search" onSubmit={submit} role="search">
-        <MapPin size={15} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={city} aria-label="Search city" />
+        <MapPin size={15} /><input ref={searchRef} value={query} onChange={(event) => setQuery(event.target.value)} placeholder={city} aria-label="Search city" />
         <button type="submit" aria-label="Search location"><Search size={15} /></button>
       </form>
-      <button className="icon-button theme-toggle" onClick={onThemeToggle} aria-label={darkMode ? 'Switch to light theme' : 'Switch to dark theme'}>{darkMode ? <Sun size={16} /> : <Moon size={16} />}</button>
+      <button className="icon-button theme-toggle" type="button" onClick={onThemeToggle} aria-label={darkMode ? 'Switch to light theme' : 'Switch to dark theme'}>{darkMode ? <Sun size={16} /> : <Moon size={16} />}</button>
       <div className="topbar-avatar" aria-label="Profile: Alex Morgan">AM</div>
     </header>
   )
@@ -152,7 +159,7 @@ function Overview({ air, onAsk, onNavigate }: { air: AirData; onAsk: (question: 
       <div className="page-heading"><div><span className="eyebrow">YOUR LOCAL AIR <span className="eyebrow-divider">/</span> YOUR DAILY BRIEFING</span><h1>A little clarity for <span>the air ahead.</span></h1><p>Understand your air. Make the next good choice.</p></div></div>
       <section className="overview-grid">
         <motion.article className="air-hero" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.45 }}>
-          <div className="air-hero-top"><div><span className="eyebrow light-eyebrow">YOUR NEIGHBORHOOD</span><h2><MapPin size={16} /> {air.city}, {air.country}</h2><span className="hero-updated"><span className="live-indicator" /> {air.simulated ? 'Illustrative sample' : `Updated ${updated}`} <span className="update-dot">·</span> {air.simulated ? 'Sample data' : 'Open-Meteo'}</span></div><button className="hero-more" aria-label="More location options"><ChevronDown size={17} /></button></div>
+          <div className="air-hero-top"><div><span className="eyebrow light-eyebrow">YOUR NEIGHBORHOOD</span><h2><MapPin size={16} /> {air.city}, {air.country}</h2><span className="hero-updated"><span className="live-indicator" /> {air.simulated ? 'Illustrative sample' : `Updated ${updated}`} <span className="update-dot">·</span> {air.simulated ? 'Sample data' : 'Open-Meteo'}</span></div><button className="hero-more" type="button" onClick={() => window.dispatchEvent(new Event('breathewise:focus-search'))} aria-label="More location options"><ChevronDown size={17} /></button></div>
           <div className="air-hero-main"><AirGauge value={air.aqi} /><div className="air-explainer"><div className="severity-pill"><span className={`severity-dot ${risk.tint}`} /> {risk.label} air quality</div><h3>{air.aqi > 60 ? 'Take it a little easier outside.' : 'A good day to get some fresh air.'}</h3><p>{risk.note}</p><div className="hero-weather"><span><ThermometerSun size={15} /> {Math.round(air.temperature)}°C</span><span><Droplets size={15} /> {Math.round(air.humidity)}% humidity</span></div></div></div>
           <div className="hero-footer"><ShieldCheck size={15} /><span>{air.aqi > 60 ? 'Children and sensitive groups should keep strenuous activity indoors.' : 'Air quality is suitable for most everyday activities.'}</span><button onClick={() => onAsk('What does today’s air quality mean for my family?')} aria-label="Ask BreatheWise about today's air"><ArrowRight size={16} /></button></div>
         </motion.article>

@@ -1,11 +1,11 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { motion } from 'framer-motion'
 import {
   Activity, ArrowDownRight, ArrowRight, ArrowUpRight, Wind, MapPin, Search,
   Sun, CloudSun, Leaf, ShieldCheck, Sparkles, CarFront, TrainFront, Bike,
-  BusFront,   Menu, X, Send, HeartPulse, House, Route, CircleHelp, Clock3, Moon,
+  BusFront, Menu, X, Send, HeartPulse, House, Route, CircleHelp, Moon,
   Check, Plus, ChevronDown, RefreshCw, Gauge, Droplets, ThermometerSun,
 } from 'lucide-react'
 import {
@@ -37,12 +37,12 @@ type AirData = {
 
 type Section = 'Overview' | 'Daily plan' | 'Indoor air' | 'Getting around' | 'My impact'
 type ActionType = 'transit' | 'carpool' | 'safe_walk' | 'home_action'
-type Impact = { co2Kg: number; total: number; transit: number; carpool: number; safeWalk: number; homeAction: number }
+type Impact = { co2Kg: number; total: number; transit: number; carpool: number; safeWalk: number; homeAction: number; trend: number[] }
 
 const fallbackAir: AirData = {
   city: 'New Delhi', country: 'India', latitude: 28.61, longitude: 77.21,
   aqi: 164, pm25: 72.4, pm10: 108, no2: 32.1, o3: 41, co: 712,
-  temperature: 19, humidity: 43, time: new Date().toISOString(), simulated: true,
+  temperature: 19, humidity: 43, time: '2026-11-19T00:00:00.000Z', simulated: true,
   trend: [
     { time: '6 AM', value: 142 }, { time: '8 AM', value: 156 }, { time: '10 AM', value: 171 },
     { time: '12 PM', value: 166 }, { time: '2 PM', value: 158 }, { time: '4 PM', value: 164 },
@@ -82,25 +82,63 @@ function Sidebar({ section, onChange, onClose }: { section: Section; onChange: (
       <div className="household-card">
         <div className="household-icon"><HeartPulse size={16} /></div>
         <div><span className="eyebrow">YOUR HOUSEHOLD</span><strong>Family of 4</strong><p>2 adults · 2 children</p></div>
-        <button className="icon-button edit-profile" aria-label="Edit household profile"><ChevronDown size={15} /></button>
+        <button className="icon-button edit-profile" type="button" onClick={() => onChange('Daily plan')} aria-label="Edit household profile"><ChevronDown size={15} /></button>
       </div>
-      <div className="sidebar-bottom"><span className="live-indicator" /> <span>Air data updates every hour</span></div>
+      <div className="sidebar-bottom"><span className="live-indicator" /> <span>Air quality from Open-Meteo</span></div>
     </aside>
   )
 }
 
+const citySuggestions = ['New Delhi', 'Mumbai', 'London', 'Paris', 'Tokyo', 'San Francisco']
+type CitySuggestion = { name: string; country: string; admin1?: string }
+
 function Header({ city, section, onSearch, onOpenMenu, onThemeToggle, darkMode }: { city: string; section: Section; onSearch: (city: string) => void; onOpenMenu: () => void; onThemeToggle: () => void; darkMode: boolean }) {
   const [query, setQuery] = useState('')
-  const submit = (event: React.FormEvent) => { event.preventDefault(); if (query.trim()) { onSearch(query.trim()); setQuery('') } }
+  const [suggestionsOpen, setSuggestionsOpen] = useState(false)
+  const [suggestions, setSuggestions] = useState<CitySuggestion[]>([])
+  const searchRef = useRef<HTMLInputElement>(null)
+  const suggestionTimerRef = useRef<number | null>(null)
+  const suggestionRequestRef = useRef<AbortController | null>(null)
+  const popularSuggestions = useMemo(() => citySuggestions.filter((suggestion) => suggestion.toLowerCase() !== city.toLowerCase()).slice(0, 3).map((name) => ({ name, country: '' })), [city])
+  const updateSuggestions = (value: string) => {
+    setQuery(value)
+    setSuggestionsOpen(true)
+    if (suggestionTimerRef.current) window.clearTimeout(suggestionTimerRef.current)
+    suggestionRequestRef.current?.abort()
+    const normalizedQuery = value.trim()
+    if (normalizedQuery.length < 2) { setSuggestions([]); return }
+    suggestionTimerRef.current = window.setTimeout(async () => {
+      const controller = new AbortController()
+      suggestionRequestRef.current = controller
+      try {
+        const response = await fetch(`/api/air-quality?city=${encodeURIComponent(normalizedQuery)}&suggestions=1`, { signal: controller.signal })
+        if (!response.ok) return
+        const data = await response.json() as { suggestions?: CitySuggestion[] }
+        setSuggestions(data.suggestions ?? [])
+      } catch (error) {
+        if ((error as Error).name !== 'AbortError') setSuggestions([])
+      }
+    }, 220)
+  }
+  const visibleSuggestions = query.trim() ? suggestions : popularSuggestions
+  const submit = (event: React.FormEvent) => { event.preventDefault(); if (query.trim()) { onSearch(query.trim()); setQuery(''); setSuggestionsOpen(false) } }
+  const chooseSuggestion = (suggestion: CitySuggestion) => { onSearch(suggestion.name); setQuery(''); setSuggestionsOpen(false); searchRef.current?.blur() }
+  useEffect(() => {
+    const focusSearch = () => searchRef.current?.focus()
+    window.addEventListener('breathewise:focus-search', focusSearch)
+    return () => window.removeEventListener('breathewise:focus-search', focusSearch)
+  }, [])
+
   return (
     <header className="topbar">
-      <button className="icon-button mobile-menu" aria-label="Open navigation" onClick={onOpenMenu}><Menu size={20} /></button>
+      <button className="icon-button mobile-menu" type="button" aria-label="Open navigation" onClick={onOpenMenu}><Menu size={20} /></button>
       <div className="breadcrumb"><span>Workspace</span><span className="breadcrumb-slash">/</span><strong>{section}</strong></div>
-      <form className="location-search" onSubmit={submit} role="search">
-        <MapPin size={15} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={city} aria-label="Search city" />
+      <form className="location-search" onSubmit={submit} role="search" onFocus={() => setSuggestionsOpen(true)} onBlur={() => window.setTimeout(() => setSuggestionsOpen(false), 120)}>
+        <MapPin size={15} /><input ref={searchRef} value={query} onChange={(event) => updateSuggestions(event.target.value)} placeholder={city} aria-label="Search city" aria-autocomplete="list" aria-controls="city-suggestions" />
         <button type="submit" aria-label="Search location"><Search size={15} /></button>
+        {suggestionsOpen && visibleSuggestions.length > 0 && <div id="city-suggestions" className="city-suggestions" role="listbox" aria-label="City suggestions">{visibleSuggestions.map((suggestion) => <button key={`${suggestion.name}-${suggestion.country}`} type="button" role="option" onMouseDown={(event) => event.preventDefault()} onClick={() => chooseSuggestion(suggestion)}><span>{suggestion.name}</span><small>{[suggestion.admin1, suggestion.country].filter(Boolean).join(', ')}</small></button>)}</div>}
       </form>
-      <button className="icon-button theme-toggle" onClick={onThemeToggle} aria-label={darkMode ? 'Switch to light theme' : 'Switch to dark theme'}>{darkMode ? <Sun size={16} /> : <Moon size={16} />}</button>
+      <button className="icon-button theme-toggle" type="button" onClick={onThemeToggle} aria-label={darkMode ? 'Switch to light theme' : 'Switch to dark theme'}>{darkMode ? <Sun size={16} /> : <Moon size={16} />}</button>
       <div className="topbar-avatar" aria-label="Profile: Alex Morgan">AM</div>
     </header>
   )
@@ -144,18 +182,21 @@ function MetricCard({ label, value, unit, icon: Icon, note, tone }: { label: str
 function Overview({ air, onAsk, onNavigate }: { air: AirData; onAsk: (question: string) => void; onNavigate: (section: Section) => void }) {
   const risk = getRisk(air.aqi)
   const updated = new Date(air.time).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
+  const trendStart = air.trend[0]?.value ?? air.aqi
+  const trendEnd = air.trend.at(-1)?.value ?? air.aqi
+  const trendSummary = trendEnd < trendStart ? 'easing later' : trendEnd > trendStart ? 'rising later' : 'holding steady'
   return (
     <>
-      <div className="page-heading"><div><span className="eyebrow">YOUR LOCAL AIR <span className="eyebrow-divider">/</span> YOUR DAILY BRIEFING</span><h1>A little clarity for <span>the air ahead.</span></h1><p>Understand your air. Make the next good choice.</p></div><button className="date-pill"><Clock3 size={14} /> Today, Nov 16 <ChevronDown size={13} /></button></div>
+      <div className="page-heading"><div><span className="eyebrow">YOUR LOCAL AIR <span className="eyebrow-divider">/</span> YOUR DAILY BRIEFING</span><h1>A little clarity for <span>the air ahead.</span></h1><p>Understand your air. Make the next good choice.</p></div></div>
       <section className="overview-grid">
         <motion.article className="air-hero" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.45 }}>
-          <div className="air-hero-top"><div><span className="eyebrow light-eyebrow">YOUR NEIGHBORHOOD</span><h2><MapPin size={16} /> {air.city}, {air.country}</h2><span className="hero-updated"><span className="live-indicator" /> Updated {updated} <span className="update-dot">·</span> {air.simulated ? 'Sample data' : 'Open-Meteo'}</span></div><button className="hero-more" aria-label="More location options"><ChevronDown size={17} /></button></div>
+          <div className="air-hero-top"><div><span className="eyebrow light-eyebrow">YOUR NEIGHBORHOOD</span><h2><MapPin size={16} /> {air.city}, {air.country}</h2><span className="hero-updated"><span className="live-indicator" /> {air.simulated ? 'Illustrative sample' : `Updated ${updated}`} <span className="update-dot">·</span> {air.simulated ? 'Sample data' : 'Open-Meteo'}</span></div><button className="hero-more" type="button" onClick={() => window.dispatchEvent(new Event('breathewise:focus-search'))} aria-label="More location options"><ChevronDown size={17} /></button></div>
           <div className="air-hero-main"><AirGauge value={air.aqi} /><div className="air-explainer"><div className="severity-pill"><span className={`severity-dot ${risk.tint}`} /> {risk.label} air quality</div><h3>{air.aqi > 60 ? 'Take it a little easier outside.' : 'A good day to get some fresh air.'}</h3><p>{risk.note}</p><div className="hero-weather"><span><ThermometerSun size={15} /> {Math.round(air.temperature)}°C</span><span><Droplets size={15} /> {Math.round(air.humidity)}% humidity</span></div></div></div>
           <div className="hero-footer"><ShieldCheck size={15} /><span>{air.aqi > 60 ? 'Children and sensitive groups should keep strenuous activity indoors.' : 'Air quality is suitable for most everyday activities.'}</span><button onClick={() => onAsk('What does today’s air quality mean for my family?')} aria-label="Ask BreatheWise about today's air"><ArrowRight size={16} /></button></div>
         </motion.article>
         <motion.article className="trend-card" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.45, delay: 0.08 }}>
           <div className="card-heading"><div><span className="eyebrow">THE DAY AT A GLANCE</span><h3>Air quality trend</h3></div><span className="trend-badge"><span className="live-indicator" /> LIVE</span></div>
-          <div className="trend-stat"><strong>{air.aqi}</strong><span>current EU AQI</span><span className="trend-change"><ArrowDownRight size={14} /> easing later</span></div>
+          <div className="trend-stat"><strong>{air.aqi}</strong><span>current EU AQI</span><span className="trend-change">{trendEnd < trendStart ? <ArrowDownRight size={14} /> : <ArrowUpRight size={14} />} {trendSummary}</span></div>
           <PollutionChart trend={air.trend} />
           <div className="chart-legend"><span><i /> Air quality index</span><span><i className="legend-threshold" /> Caution level</span></div>
         </motion.article>
@@ -183,9 +224,13 @@ const dailyPlan = [
   { time: '6:00 PM', title: 'Let your home reset', detail: 'Wipe surfaces with a damp cloth to capture dust instead of stirring it up.', icon: House, tag: 'At home' },
 ]
 
-function DailyPlan() {
+function DailyPlan({ air }: { air: AirData }) {
   const [checked, setChecked] = useState<string[]>([])
-  return <section className="subpage"><div className="page-heading"><div><span className="eyebrow">YOUR HOUSEHOLD · TODAY</span><h1>A calmer day, <span>step by step.</span></h1><p>A flexible routine shaped around today&apos;s air and your family&apos;s needs.</p></div><button className="outline-button"><RefreshCw size={14} /> Refresh plan</button></div><div className="plan-layout"><div className="plan-list">{dailyPlan.map((item, i) => { const Icon = item.icon; const done = checked.includes(item.title); return <motion.article key={item.title} className={`plan-item ${done ? 'completed' : ''}`} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * .05 }}><div className="plan-time">{item.time}</div><span className="plan-icon"><Icon size={17} /></span><div className="plan-copy"><span className="plan-tag">{item.tag}</span><h3>{item.title}</h3><p>{item.detail}</p></div><button className={`check-button ${done ? 'checked' : ''}`} aria-label={done ? `Mark ${item.title} incomplete` : `Mark ${item.title} complete`} onClick={() => setChecked((old) => done ? old.filter((title) => title !== item.title) : [...old, item.title])}>{done ? <Check size={16} /> : null}</button></motion.article> })}</div><aside className="plan-side"><span className="side-sun"><Sparkles size={20} /></span><span className="eyebrow">YOUR PLAN, YOUR PACE</span><h3>It&apos;s about progress, not perfection.</h3><p>Small, repeatable habits can help your family spend less time in polluted air. Adjust the plan around your real day.</p><div className="plan-progress"><div><span>Today&apos;s check-ins</span><strong>{checked.length} of {dailyPlan.length}</strong></div><div className="progress-track"><i style={{ width: `${checked.length / dailyPlan.length * 100}%` }} /></div></div></aside></div><div className="disclaimer-note"><ShieldCheck size={16} /><span>Guidance is based on general environmental recommendations, not medical advice. If anyone has concerning symptoms, contact a healthcare professional.</span></div></section>
+  const [workStart, setWorkStart] = useState('8:30 AM')
+  const [schoolStart, setSchoolStart] = useState('8:00 AM')
+  const [exercise, setExercise] = useState('Indoor')
+  const [transport, setTransport] = useState('Public transit')
+  return <section className="subpage"><div className="page-heading"><div><span className="eyebrow">YOUR HOUSEHOLD · TODAY</span><h1>A calmer day, <span>step by step.</span></h1><p>A flexible routine shaped around today&apos;s air and your family&apos;s needs.</p></div><span className="outline-button"><Sparkles size={14} /> Personalized for you</span></div><details className="preferences-panel"><summary><span><Sparkles size={15} /> Tailor the routine to your day</span><ChevronDown size={15} /></summary><div className="preferences-grid"><label>Workday starts<select value={workStart} onChange={(event) => setWorkStart(event.target.value)}><option>7:30 AM</option><option>8:30 AM</option><option>9:30 AM</option><option>10:00 AM</option></select></label><label>School drop-off<select value={schoolStart} onChange={(event) => setSchoolStart(event.target.value)}><option>7:30 AM</option><option>8:00 AM</option><option>8:30 AM</option><option>9:00 AM</option></select></label><label>Exercise preference<select value={exercise} onChange={(event) => setExercise(event.target.value)}><option>Indoor</option><option>Outdoor</option><option>Light movement</option></select></label><label>Usual commute<select value={transport} onChange={(event) => setTransport(event.target.value)}><option>Public transit</option><option>Carpool</option><option>Private car</option><option>Walk or cycle</option></select></label></div></details><div className="plan-layout"><div className="plan-list">{dailyPlan.map((item, i) => { const Icon = item.icon; const done = checked.includes(item.title); const time = i === 0 ? workStart : i === 1 ? schoolStart : item.time; const title = i === 2 && exercise !== 'Indoor' && air.aqi <= 60 ? 'Use a cleaner-air window for movement' : item.title; const detail = i === 1 ? `${transport} is set as your usual commute. Leave a little extra time for a lower-traffic route.` : i === 2 && exercise !== 'Indoor' && air.aqi > 60 ? 'Outdoor air is elevated today. Choose an indoor or lower-intensity activity instead.' : i === 2 && exercise !== 'Indoor' ? 'Choose an easy pace and quieter route while pollution is lower.' : item.detail; return <motion.article key={item.title} className={`plan-item ${done ? 'completed' : ''}`} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * .05 }}><div className="plan-time">{time}</div><span className="plan-icon"><Icon size={17} /></span><div className="plan-copy"><span className="plan-tag">{item.tag}</span><h3>{title}</h3><p>{detail}</p></div><button className={`check-button ${done ? 'checked' : ''}`} aria-label={done ? `Mark ${item.title} incomplete` : `Mark ${item.title} complete`} onClick={() => setChecked((old) => done ? old.filter((title) => title !== item.title) : [...old, item.title])}>{done ? <Check size={16} /> : null}</button></motion.article> })}</div><aside className="plan-side"><span className="side-sun"><Sparkles size={20} /></span><span className="eyebrow">YOUR PLAN, YOUR PACE</span><h3>It&apos;s about progress, not perfection.</h3><p>Small, repeatable habits can help your family spend less time in polluted air. Adjust the plan around your real day.</p><div className="plan-progress"><div><span>Today&apos;s check-ins</span><strong>{checked.length} of {dailyPlan.length}</strong></div><div className="progress-track"><i style={{ width: `${checked.length / dailyPlan.length * 100}%` }} /></div></div></aside></div><div className="disclaimer-note"><ShieldCheck size={16} /><span>Guidance is based on general environmental recommendations, not medical advice. If anyone has concerning symptoms, contact a healthcare professional.</span></div></section>
 }
 
 const tips = [
@@ -221,10 +266,10 @@ function GettingAround({ air, onLog }: { air: AirData; onLog: (type: ActionType,
   return <section className="subpage"><div className="page-heading"><div><span className="eyebrow">A BETTER WAY THERE</span><h1>Choose a route <span>that works for you.</span></h1><p>Balance convenience, outdoor exposure and estimated trip emissions.</p></div><div className="route-input"><label htmlFor="distance">ONE-WAY DISTANCE</label><div><input id="distance" type="number" min="1" max="100" value={distance} onChange={(event) => setDistance(Math.min(100, Math.max(1, Number(event.target.value) || 1)))} /><span>km</span></div></div></div><div className="exposure-banner"><span className="exposure-icon"><Wind size={18} /></span><div><strong>{safeForWalk ? 'Outdoor activity is reasonable today.' : 'Keep active travel for a clearer-air day.'}</strong><p>{safeForWalk ? 'Take breaks and choose quieter streets where you can.' : 'Today’s elevated pollution can increase what you breathe during exertion. Public transport is a lower-exposure option.'}</p></div><span className="aqi-mini">AQI {air.aqi}</span></div><div className="travel-table"><div className="travel-head"><span>HOW YOU GO</span><span>TRAVEL TIME</span><span>EXPOSURE</span><span>EST. CO₂</span><span /></div>{travel.map((item) => { const Icon = item.icon; const canWalk = item.mode !== 'Walk / cycle' || safeForWalk; return <div className={`travel-row ${item.good ? 'recommended' : ''} ${item.mode === 'Walk / cycle' && !safeForWalk ? 'not-recommended' : ''}`} key={item.mode}><div className="travel-mode"><span className="travel-icon"><Icon size={19} /></span><span><strong>{item.mode}</strong><small>{item.tag}</small></span></div><span className="travel-data">{item.mode === 'Walk / cycle' && !safeForWalk ? '—' : item.time}</span><span className={`exposure-text ${item.good ? 'lower' : ''}`}>{item.mode === 'Walk / cycle' && !safeForWalk ? 'Not recommended' : item.exposure}</span><span className="travel-data">{item.mode === 'Walk / cycle' ? '0 kg' : item.co2}</span><button className={`log-trip ${logged === item.mode ? 'logged' : ''}`} disabled={!canWalk || logged === item.mode} onClick={() => logJourney(item.mode)}>{logged === item.mode ? <><Check size={13} /> Logged</> : 'Choose'}</button></div> })}</div><p className="table-footnote">Travel times are illustrative estimates. CO₂ is a rough per-trip estimate based on distance and typical vehicle factors; actual values vary by vehicle, occupancy and route. Walking and cycling are not suggested when outdoor exposure may be unsafe.</p><div className="disclaimer-note"><Leaf size={16} /><span>Transport emissions are estimates, not a personal carbon audit. Every shared ride and transit journey is a step in the right direction.</span></div></section>
 }
 
-function Impact({ impact, onLog }: { impact: Impact; onLog: (type: ActionType, co2: number) => Promise<void> }) {
+function Impact({ impact, period, onPeriodChange, onLog }: { impact: Impact; period: 'week' | 'month'; onPeriodChange: (period: 'week' | 'month') => void; onLog: (type: ActionType, distanceKm: number) => Promise<void> }) {
   const [busy, setBusy] = useState(false)
   const record = async (type: ActionType) => { setBusy(true); await onLog(type, 8); setBusy(false) }
-  return <section className="subpage"><div className="page-heading"><div><span className="eyebrow">YOUR FOOTPRINT, IN A BETTER DIRECTION</span><h1>Little choices <span>add up.</span></h1><p>A personal tally of cleaner-commute and home-air actions from this browser.</p></div><span className="period-pill"><span className="live-indicator" /> This week</span></div><div className="impact-hero"><div className="impact-leaf"><Leaf size={23} /></div><div><span className="eyebrow light-eyebrow">ESTIMATED CO₂ AVOIDED</span><div className="impact-total">{impact.co2Kg.toFixed(1)}<span>kg</span></div><p>From {impact.total} action{impact.total === 1 ? '' : 's'} logged this week</p></div><div className="impact-sparkline"><div className="sparkline-bars">{[26, 44, 32, 66, 49, 78, Math.min(90, Math.max(18, impact.total * 8))].map((height, i) => <i key={i} style={{ height: `${height}%` }} />)}</div><span>YOUR WEEK, SO FAR</span></div></div><div className="impact-stats"><div><span className="impact-stat-icon"><TrainFront size={17} /></span><strong>{impact.transit}</strong><span>Transit journeys</span></div><div><span className="impact-stat-icon"><CarFront size={17} /></span><strong>{impact.carpool}</strong><span>Carpool trips</span></div><div><span className="impact-stat-icon"><Bike size={17} /></span><strong>{impact.safeWalk}</strong><span>Safe active trips</span></div><div><span className="impact-stat-icon"><House size={17} /></span><strong>{impact.homeAction}</strong><span>Home-air actions</span></div></div><div className="log-actions"><div className="section-heading"><div><span className="eyebrow">ADD TO YOUR WEEK</span><h2>What have you done today?</h2></div></div><div className="log-action-grid"><button onClick={() => record('transit')} disabled={busy}><span><TrainFront size={18} /></span><strong>Took transit</strong><small>~1.9 kg CO₂ avoided</small><Plus size={16} className="action-plus" /></button><button onClick={() => record('carpool')} disabled={busy}><span><CarFront size={18} /></span><strong>Shared a ride</strong><small>~1.1 kg CO₂ avoided</small><Plus size={16} className="action-plus" /></button><button onClick={() => record('safe_walk')} disabled={busy}><span><Bike size={18} /></span><strong>Walked or cycled</strong><small>Only when outdoor air is safe</small><Plus size={16} className="action-plus" /></button><button onClick={() => record('home_action')} disabled={busy}><span><House size={18} /></span><strong>Improved home air</strong><small>One small indoor-air action</small><Plus size={16} className="action-plus" /></button></div></div><div className="disclaimer-note"><CircleHelp size={16} /><span>Impact figures are illustrative estimates using average per-trip factors—not measured personal emissions. Your actual savings depend on distance and vehicle.</span></div></section>
+  return     <section className="subpage"><div className="page-heading"><div><span className="eyebrow">YOUR FOOTPRINT, IN A BETTER DIRECTION</span><h1>Little choices <span>add up.</span></h1><p>A personal tally of cleaner-commute and home-air actions from this browser.</p></div><div className="period-toggle" role="group" aria-label="Impact date range"><button className={period === 'week' ? 'selected' : ''} onClick={() => onPeriodChange('week')}>This week</button><button className={period === 'month' ? 'selected' : ''} onClick={() => onPeriodChange('month')}>This month</button></div></div><div className="impact-hero"><div className="impact-leaf"><Leaf size={23} /></div><div><span className="eyebrow light-eyebrow">ESTIMATED CO₂ AVOIDED</span><div className="impact-total">{impact.co2Kg.toFixed(1)}<span>kg</span></div><p>From {impact.total} action{impact.total === 1 ? '' : 's'} logged this {period}</p></div><div className="impact-sparkline"><div className="sparkline-bars">{impact.trend.map((count, i) => <i key={i} style={{ height: `${count === 0 ? 7 : 18 + (count / Math.max(1, ...impact.trend)) * 72}%` }} />)}</div><span>YOUR {period.toUpperCase()}, SO FAR</span></div></div><div className="impact-stats"><div><span className="impact-stat-icon"><TrainFront size={17} /></span><strong>{impact.transit}</strong><span>Transit journeys</span></div><div><span className="impact-stat-icon"><CarFront size={17} /></span><strong>{impact.carpool}</strong><span>Carpool trips</span></div><div><span className="impact-stat-icon"><Bike size={17} /></span><strong>{impact.safeWalk}</strong><span>Safe active trips</span></div><div><span className="impact-stat-icon"><House size={17} /></span><strong>{impact.homeAction}</strong><span>Home-air actions</span></div></div><div className="log-actions"><div className="section-heading"><div><span className="eyebrow">ADD TO YOUR {period.toUpperCase()}</span><h2>What have you done today?</h2></div></div><div className="log-action-grid"><button onClick={() => record('transit')} disabled={busy}><span><TrainFront size={18} /></span><strong>Took transit</strong><small>~1.9 kg CO₂ avoided</small><Plus size={16} className="action-plus" /></button><button onClick={() => record('carpool')} disabled={busy}><span><CarFront size={18} /></span><strong>Shared a ride</strong><small>~1.1 kg CO₂ avoided</small><Plus size={16} className="action-plus" /></button><button onClick={() => record('safe_walk')} disabled={busy}><span><Bike size={18} /></span><strong>Walked or cycled</strong><small>Only when outdoor air is safe</small><Plus size={16} className="action-plus" /></button><button onClick={() => record('home_action')} disabled={busy}><span><House size={18} /></span><strong>Improved home air</strong><small>One small indoor-air action</small><Plus size={16} className="action-plus" /></button></div></div><div className="disclaimer-note"><CircleHelp size={16} /><span>Impact figures are illustrative estimates using average per-trip factors—not measured personal emissions. Your actual savings depend on distance and vehicle.</span></div></section>
 }
 
 function Assistant({ air, open, onClose }: { air: AirData; open: boolean; onClose: () => void }) {
@@ -266,7 +311,8 @@ export default function BreatheWiseDashboard() {
   const [mobileNav, setMobileNav] = useState(false)
   const [assistantOpen, setAssistantOpen] = useState(false)
   const [darkMode, setDarkMode] = useState(false)
-  const [impact, setImpact] = useState<Impact>({ co2Kg: 0, total: 0, transit: 0, carpool: 0, safeWalk: 0, homeAction: 0 })
+  const [impact, setImpact] = useState<Impact>({ co2Kg: 0, total: 0, transit: 0, carpool: 0, safeWalk: 0, homeAction: 0, trend: Array(7).fill(0) })
+  const [impactPeriod, setImpactPeriod] = useState<'week' | 'month'>('week')
   const risk = useMemo(() => getRisk(air.aqi), [air.aqi])
 
   const loadAir = useCallback(async (city: string) => {
@@ -279,16 +325,16 @@ export default function BreatheWiseDashboard() {
     finally { setLoadingAir(false) }
   }, [])
 
-  const loadImpact = useCallback(async () => {
-    try { const response = await fetch('/api/impact'); if (response.ok) setImpact(await response.json()) } catch { /* Keep the empty state if storage is unavailable. */ }
+  const loadImpact = useCallback(async (period: 'week' | 'month' = 'week') => {
+    try { const response = await fetch(`/api/impact?period=${period}`); if (response.ok) setImpact(await response.json()) } catch { /* Keep the empty state if storage is unavailable. */ }
   }, [])
 
   useEffect(() => { void loadAir('New Delhi'); void loadImpact() }, [loadAir, loadImpact])
 
   const logAction = useCallback(async (type: ActionType, co2Kg: number) => {
     const response = await fetch('/api/impact', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type, distanceKm: co2Kg }) })
-    if (response.ok) await loadImpact()
-  }, [loadImpact])
+    if (response.ok) await loadImpact(impactPeriod)
+  }, [loadImpact, impactPeriod])
 
   const askAssistant = (question: string) => { setAssistantOpen(true); window.setTimeout(() => { window.dispatchEvent(new CustomEvent('breathewise:ask', { detail: question })) }, 50) }
 
@@ -299,13 +345,13 @@ export default function BreatheWiseDashboard() {
       <main className="main-panel"><Header city={air.city} section={section} onSearch={loadAir} onOpenMenu={() => setMobileNav(true)} onThemeToggle={() => setDarkMode((enabled) => !enabled)} darkMode={darkMode} /><div className="content-wrap">
         {loadingAir && <div className="loading-strip"><span /> Updating local air quality…</div>}
         {section === 'Overview' && <Overview air={air} onAsk={askAssistant} onNavigate={setSection} />}
-        {section === 'Daily plan' && <DailyPlan />}
+        {section === 'Daily plan' && <DailyPlan air={air} />}
         {section === 'Indoor air' && <IndoorAir />}
         {section === 'Getting around' && <GettingAround air={air} onLog={logAction} />}
-        {section === 'My impact' && <Impact impact={impact} onLog={logAction} />}
+        {section === 'My impact' && <Impact impact={impact} period={impactPeriod} onPeriodChange={(period) => { setImpactPeriod(period); void loadImpact(period) }} onLog={logAction} />}
         <footer className="app-footer"><span>© 2026 BreatheWise AI</span><span>Air quality data by Open-Meteo · Educational guidance, not medical advice</span><button onClick={() => setAssistantOpen(true)}><Sparkles size={13} /> Ask BreatheWise</button></footer>
       </div></main>
-      <button className="assistant-fab" onClick={() => setAssistantOpen(true)} aria-label="Open BreatheWise AI assistant"><span className="fab-spark"><Sparkles size={19} /></span><span>Ask BreatheWise</span></button>
+      <button className="assistant-fab" type="button" onClick={() => setAssistantOpen(true)} aria-label="Open BreatheWise AI assistant" aria-haspopup="dialog" aria-expanded={assistantOpen}><span className="fab-spark"><Sparkles size={19} /></span><span>Ask BreatheWise</span><span className="fab-status">AI</span></button>
       <Assistant air={air} open={assistantOpen} onClose={() => setAssistantOpen(false)} />
     </div>
   )

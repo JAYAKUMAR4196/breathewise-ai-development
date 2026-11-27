@@ -30,8 +30,12 @@ export async function GET(request: Request) {
     const geoResponse = await fetch(geoUrl, { next: { revalidate: 86400 } })
     if (!geoResponse.ok) throw new Error('Location lookup failed')
     const geoData = await geoResponse.json()
-    const place = geoData.results?.[0]
+    const places = Array.isArray(geoData.results) ? geoData.results : []
+    const place = places[0]
     if (!place) return NextResponse.json({ error: 'City not found' }, { status: 404 })
+    if (searchParams.get('suggestions') === '1') {
+      return NextResponse.json({ suggestions: places.slice(0, 5).map((result: { name: string; country?: string; admin1?: string }) => ({ name: result.name, country: result.country || '', admin1: result.admin1 || '' })) })
+    }
 
     const common = new URLSearchParams({ latitude: String(place.latitude), longitude: String(place.longitude), timezone: 'auto' })
     const airUrl = new URL('https://air-quality-api.open-meteo.com/v1/air-quality')
@@ -47,8 +51,12 @@ export async function GET(request: Request) {
     const [airResponse, weatherResponse] = await Promise.all([fetch(airUrl, { next: { revalidate: 900 } }), fetch(weatherUrl, { next: { revalidate: 900 } })])
     if (!airResponse.ok || !weatherResponse.ok) throw new Error('Air data unavailable')
     const [air, weather] = await Promise.all([airResponse.json(), weatherResponse.json()])
-    const hourly = (air.hourly?.time ?? []).map((time: string, index: number) => ({ time, value: air.hourly?.european_aqi?.[index] })).filter((item: { value?: number }) => typeof item.value === 'number').slice(0, 12)
-    const trend = hourly.length ? hourly.map((item: { time: string; value: number }) => ({ time: new Date(item.time).toLocaleTimeString('en', { hour: 'numeric' }), value: item.value })) : fallback.trend
+    const hourly = (air.hourly?.time ?? []).map((time: string, index: number) => ({ time, value: air.hourly?.european_aqi?.[index] })).filter((item: { value?: number }) => typeof item.value === 'number')
+    const currentTime = typeof air.current?.time === 'string' ? air.current.time.slice(0, 13) : ''
+    const currentIndex = hourly.findIndex((item: { time: string }) => item.time.startsWith(currentTime))
+    const startIndex = Math.max(0, currentIndex - 2)
+    const visibleHours = hourly.slice(startIndex, startIndex + 12)
+    const trend = visibleHours.length ? visibleHours.map((item: { time: string; value: number }) => ({ time: new Date(item.time).toLocaleTimeString('en', { hour: 'numeric' }), value: item.value })) : fallback.trend
     const current = air.current ?? {}
     const currentWeather = weather.current ?? {}
     return NextResponse.json({

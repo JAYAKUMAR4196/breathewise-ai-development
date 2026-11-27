@@ -89,10 +89,19 @@ function Sidebar({ section, onChange, onClose }: { section: Section; onChange: (
   )
 }
 
+const citySuggestions = ['New Delhi', 'Mumbai', 'London', 'Paris', 'Tokyo', 'San Francisco']
+
 function Header({ city, section, onSearch, onOpenMenu, onThemeToggle, darkMode }: { city: string; section: Section; onSearch: (city: string) => void; onOpenMenu: () => void; onThemeToggle: () => void; darkMode: boolean }) {
   const [query, setQuery] = useState('')
+  const [suggestionsOpen, setSuggestionsOpen] = useState(false)
   const searchRef = useRef<HTMLInputElement>(null)
-  const submit = (event: React.FormEvent) => { event.preventDefault(); if (query.trim()) { onSearch(query.trim()); setQuery('') } }
+  const suggestions = useMemo(() => {
+    const normalizedQuery = query.trim().toLowerCase()
+    if (!normalizedQuery) return citySuggestions.filter((suggestion) => suggestion.toLowerCase() !== city.toLowerCase()).slice(0, 3)
+    return citySuggestions.filter((suggestion) => suggestion.toLowerCase().includes(normalizedQuery)).slice(0, 4)
+  }, [city, query])
+  const submit = (event: React.FormEvent) => { event.preventDefault(); if (query.trim()) { onSearch(query.trim()); setQuery(''); setSuggestionsOpen(false) } }
+  const chooseSuggestion = (suggestion: string) => { onSearch(suggestion); setQuery(''); setSuggestionsOpen(false); searchRef.current?.blur() }
   useEffect(() => {
     const focusSearch = () => searchRef.current?.focus()
     window.addEventListener('breathewise:focus-search', focusSearch)
@@ -103,9 +112,10 @@ function Header({ city, section, onSearch, onOpenMenu, onThemeToggle, darkMode }
     <header className="topbar">
       <button className="icon-button mobile-menu" type="button" aria-label="Open navigation" onClick={onOpenMenu}><Menu size={20} /></button>
       <div className="breadcrumb"><span>Workspace</span><span className="breadcrumb-slash">/</span><strong>{section}</strong></div>
-      <form className="location-search" onSubmit={submit} role="search">
-        <MapPin size={15} /><input ref={searchRef} value={query} onChange={(event) => setQuery(event.target.value)} placeholder={city} aria-label="Search city" />
+      <form className="location-search" onSubmit={submit} role="search" onFocus={() => setSuggestionsOpen(true)} onBlur={() => window.setTimeout(() => setSuggestionsOpen(false), 120)}>
+        <MapPin size={15} /><input ref={searchRef} value={query} onChange={(event) => { setQuery(event.target.value); setSuggestionsOpen(true) }} placeholder={city} aria-label="Search city" aria-autocomplete="list" aria-controls="city-suggestions" />
         <button type="submit" aria-label="Search location"><Search size={15} /></button>
+        {suggestionsOpen && suggestions.length > 0 && <div id="city-suggestions" className="city-suggestions" role="listbox" aria-label="City suggestions">{suggestions.map((suggestion) => <button key={suggestion} type="button" role="option" onMouseDown={(event) => event.preventDefault()} onClick={() => chooseSuggestion(suggestion)}>{suggestion}{suggestion.toLowerCase() === city.toLowerCase() && <small>Current city</small>}</button>)}</div>}
       </form>
       <button className="icon-button theme-toggle" type="button" onClick={onThemeToggle} aria-label={darkMode ? 'Switch to light theme' : 'Switch to dark theme'}>{darkMode ? <Sun size={16} /> : <Moon size={16} />}</button>
       <div className="topbar-avatar" aria-label="Profile: Alex Morgan">AM</div>
@@ -320,7 +330,7 @@ export default function BreatheWiseDashboard() {
         {section === 'My impact' && <Impact impact={impact} period={impactPeriod} onPeriodChange={(period) => { setImpactPeriod(period); void loadImpact(period) }} onLog={logAction} />}
         <footer className="app-footer"><span>© 2026 BreatheWise AI</span><span>Air quality data by Open-Meteo · Educational guidance, not medical advice</span><button onClick={() => setAssistantOpen(true)}><Sparkles size={13} /> Ask BreatheWise</button></footer>
       </div></main>
-      <button className="assistant-fab" onClick={() => setAssistantOpen(true)} aria-label="Open BreatheWise AI assistant"><span className="fab-spark"><Sparkles size={19} /></span><span>Ask BreatheWise</span></button>
+      <button className="assistant-fab" type="button" onClick={() => setAssistantOpen(true)} aria-label="Open BreatheWise AI assistant" aria-haspopup="dialog" aria-expanded={assistantOpen}><span className="fab-spark"><Sparkles size={19} /></span><span>Ask BreatheWise</span><span className="fab-status">AI</span></button>
       <Assistant air={air} open={assistantOpen} onClose={() => setAssistantOpen(false)} />
     </div>
   )

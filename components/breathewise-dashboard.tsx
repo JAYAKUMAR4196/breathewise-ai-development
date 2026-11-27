@@ -5,7 +5,7 @@ import { motion } from 'framer-motion'
 import {
   Activity, ArrowDownRight, ArrowRight, ArrowUpRight, Wind, MapPin, Search,
   Sun, CloudSun, Leaf, ShieldCheck, Sparkles, CarFront, TrainFront, Bike,
-  BusFront,   Menu, X, Send, HeartPulse, House, Route, CircleHelp, Clock3, Moon,
+  BusFront, Menu, X, Send, HeartPulse, House, Route, CircleHelp, Moon,
   Check, Plus, ChevronDown, RefreshCw, Gauge, Droplets, ThermometerSun,
 } from 'lucide-react'
 import {
@@ -144,13 +144,12 @@ function MetricCard({ label, value, unit, icon: Icon, note, tone }: { label: str
 function Overview({ air, onAsk, onNavigate }: { air: AirData; onAsk: (question: string) => void; onNavigate: (section: Section) => void }) {
   const risk = getRisk(air.aqi)
   const updated = new Date(air.time).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
-  const todayLabel = new Date().toLocaleDateString('en', { month: 'short', day: 'numeric' })
   const trendStart = air.trend[0]?.value ?? air.aqi
   const trendEnd = air.trend.at(-1)?.value ?? air.aqi
   const trendSummary = trendEnd < trendStart ? 'easing later' : trendEnd > trendStart ? 'rising later' : 'holding steady'
   return (
     <>
-      <div className="page-heading"><div><span className="eyebrow">YOUR LOCAL AIR <span className="eyebrow-divider">/</span> YOUR DAILY BRIEFING</span><h1>A little clarity for <span>the air ahead.</span></h1><p>Understand your air. Make the next good choice.</p></div><button className="date-pill"><Clock3 size={14} /> Today, {todayLabel} <ChevronDown size={13} /></button></div>
+      <div className="page-heading"><div><span className="eyebrow">YOUR LOCAL AIR <span className="eyebrow-divider">/</span> YOUR DAILY BRIEFING</span><h1>A little clarity for <span>the air ahead.</span></h1><p>Understand your air. Make the next good choice.</p></div></div>
       <section className="overview-grid">
         <motion.article className="air-hero" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.45 }}>
           <div className="air-hero-top"><div><span className="eyebrow light-eyebrow">YOUR NEIGHBORHOOD</span><h2><MapPin size={16} /> {air.city}, {air.country}</h2><span className="hero-updated"><span className="live-indicator" /> {air.simulated ? 'Illustrative sample' : `Updated ${updated}`} <span className="update-dot">·</span> {air.simulated ? 'Sample data' : 'Open-Meteo'}</span></div><button className="hero-more" aria-label="More location options"><ChevronDown size={17} /></button></div>
